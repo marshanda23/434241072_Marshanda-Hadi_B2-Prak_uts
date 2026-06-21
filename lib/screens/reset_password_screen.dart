@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _emailCtrl = TextEditingController();
   bool _isLoading = false;
   bool _emailSent = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -22,13 +24,22 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   Future<void> _handleReset() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _emailSent = true;
-    });
+    setState(() { _isLoading = true; _errorMessage = null; });
+
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.auth.resetPasswordForEmail(_emailCtrl.text.trim());
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _emailSent = true;
+      });
+    } on AuthException catch (e) {
+      setState(() { _isLoading = false; _errorMessage = e.message; });
+    } catch (e) {
+      setState(() { _isLoading = false; _errorMessage = 'Terjadi kesalahan, coba lagi.'; });
+    }
   }
 
   @override
@@ -219,6 +230,22 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                             ),
                           ),
                         ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Row(children: [
+                              Icon(Icons.error_outline, color: Colors.red.shade600, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade700, fontSize: 13))),
+                            ]),
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,

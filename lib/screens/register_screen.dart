@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
 
@@ -14,7 +15,6 @@ class _RegisterScreenState extends State<RegisterScreen>
   final _formKey = GlobalKey<FormState>();
   final _namaCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _konfirmasiCtrl = TextEditingController();
   bool _showPassword = false;
@@ -40,7 +40,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     _animCtrl.dispose();
     _namaCtrl.dispose();
     _emailCtrl.dispose();
-    _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     _konfirmasiCtrl.dispose();
     super.dispose();
@@ -49,21 +48,59 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Registrasi berhasil! Silakan login.'),
-        backgroundColor: AppTheme.successColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-    );
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Daftar menggunakan Supabase Auth.
+      // Trigger di database (handle_new_user) otomatis membuat row
+      // di tabel profiles menggunakan data ini.
+      await supabase.auth.signUp(
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text.trim(),
+        data: {
+          'nama': _namaCtrl.text.trim(),
+          'role': 'User',
+        },
+      );
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Registrasi berhasil! Silakan login.'),
+          backgroundColor: AppTheme.successColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    } on AuthException catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Registrasi gagal, coba lagi.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   @override
@@ -151,20 +188,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                             validator: (v) {
                               if (v!.trim().isEmpty) return 'Email tidak boleh kosong';
                               if (!v.contains('@')) return 'Format email tidak valid';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _label('Username', isDark),
-                          const SizedBox(height: 8),
-                          _field(
-                            controller: _usernameCtrl,
-                            hint: 'Masukkan username',
-                            icon: Icons.person_outline_rounded,
-                            isDark: isDark,
-                            validator: (v) {
-                              if (v!.trim().isEmpty) return 'Username tidak boleh kosong';
-                              if (v.trim().length < 4) return 'Username minimal 4 karakter';
                               return null;
                             },
                           ),

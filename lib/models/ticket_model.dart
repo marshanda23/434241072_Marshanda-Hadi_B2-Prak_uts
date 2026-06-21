@@ -5,10 +5,11 @@ class TicketModel {
   final String status; 
   final String prioritas; 
   final String kategori;
-  final String pembuatUsername;
+  final String pembuatId;
   final String? assignedTo;
   final DateTime createdAt;
   final List<KomentarModel> komentar;
+  final String? lampiranUrl;
 
   TicketModel({
     required this.id,
@@ -17,10 +18,11 @@ class TicketModel {
     required this.status,
     required this.prioritas,
     required this.kategori,
-    required this.pembuatUsername,
+    required this.pembuatId,
     this.assignedTo,
     required this.createdAt,
     this.komentar = const [],
+    this.lampiranUrl,
   });
 
   TicketModel copyWith({
@@ -35,21 +37,24 @@ class TicketModel {
       status: status ?? this.status,
       prioritas: prioritas,
       kategori: kategori,
-      pembuatUsername: pembuatUsername,
+      pembuatId: pembuatId,
       assignedTo: assignedTo ?? this.assignedTo,
       createdAt: createdAt,
       komentar: komentar ?? this.komentar,
+      lampiranUrl: lampiranUrl,
     );
   }
 }
 
 class KomentarModel {
-  final String username;
+  final String userId;
+  final String nama;
   final String isi;
   final DateTime waktu;
 
   KomentarModel({
-    required this.username,
+    required this.userId,
+    required this.nama,
     required this.isi,
     required this.waktu,
   });
@@ -70,5 +75,21 @@ class NotifikasiModel {
     required this.tipe,
     required this.waktu,
     this.sudahDibaca = false,
+  });
+}
+
+class RiwayatTiketModel {
+  final String id;
+  final String ticketId;
+  final String aksi;
+  final String keterangan;
+  final DateTime waktu;
+
+  RiwayatTiketModel({
+    required this.id,
+    required this.ticketId,
+    required this.aksi,
+    required this.keterangan,
+    required this.waktu,
   });
 }

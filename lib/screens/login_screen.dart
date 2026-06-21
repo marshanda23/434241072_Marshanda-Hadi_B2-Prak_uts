@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../data/dummy_data.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/user_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
 import 'register_screen.dart';
@@ -14,7 +15,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _usernameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _showPassword = false;
   bool _isLoading = false;
@@ -37,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   void dispose() {
     _animCtrl.dispose();
-    _usernameCtrl.dispose();
+    _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
@@ -45,24 +46,52 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _isLoading = true; _errorMessage = null; });
-    await Future.delayed(const Duration(seconds: 1));
 
-    final username = _usernameCtrl.text.trim().toLowerCase();
+    final email = _emailCtrl.text.trim().toLowerCase();
     final password = _passwordCtrl.text.trim();
 
-    if (DummyData.credentials.containsKey(username) &&
-        DummyData.credentials[username]!['password'] == password) {
-      final user = DummyData.users[username]!;
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Login menggunakan Supabase Auth
+      final authResponse = await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      final authUser = authResponse.user;
+      if (authUser == null) {
+        setState(() { _isLoading = false; _errorMessage = 'Email atau password salah.'; });
+        return;
+      }
+
+      // Ambil data tambahan (nama, role) dari tabel profiles
+      final profile = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+      if (profile == null) {
+        setState(() { _isLoading = false; _errorMessage = 'Profil pengguna tidak ditemukan.'; });
+        return;
+      }
+
+      final user = UserModel.fromMap(profile);
+
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => MainNavigation(user: user)),
       );
-    } else {
-      setState(() { _isLoading = false; _errorMessage = 'Username atau password salah.'; });
+    } on AuthException catch (e) {
+      setState(() { _isLoading = false; _errorMessage = e.message; });
+    } catch (e) {
+      setState(() { _isLoading = false; _errorMessage = 'Terjadi kesalahan, coba lagi.'; });
     }
   }
 
+  // build(), _label(), _field() tidak berubah sama sekali
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -110,11 +139,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _label('Username', isDark),
+                            _label('Email', isDark),
                             const SizedBox(height: 8),
-                            _field(controller: _usernameCtrl, hint: 'Masukkan username',
-                                icon: Icons.person_outline_rounded, isDark: isDark,
-                                validator: (v) => v!.trim().isEmpty ? 'Username tidak boleh kosong' : null),
+                            _field(controller: _emailCtrl, hint: 'Masukkan email',
+                                icon: Icons.email_outlined, isDark: isDark,
+                                validator: (v) {
+                                  if (v!.trim().isEmpty) return 'Email tidak boleh kosong';
+                                  if (!v.contains('@')) return 'Format email tidak valid';
+                                  return null;
+                                }),
                             const SizedBox(height: 18),
                             _label('Password', isDark),
                             const SizedBox(height: 8),

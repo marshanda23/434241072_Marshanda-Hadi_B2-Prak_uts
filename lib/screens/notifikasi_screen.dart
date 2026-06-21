@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
-import '../data/dummy_data.dart';
+import '../models/ticket_model.dart';
 import '../theme/app_theme.dart';
 
 class NotifikasiScreen extends StatefulWidget {
@@ -13,12 +14,74 @@ class NotifikasiScreen extends StatefulWidget {
 }
 
 class _NotifikasiScreenState extends State<NotifikasiScreen> {
+  List<NotifikasiModel> _notifs = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifikasi();
+  }
+
+  Future<void> _loadNotifikasi() async {
+    setState(() => _isLoading = true);
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase
+          .from('notifikasi')
+          .select()
+          .eq('user_id', widget.user.id)
+          .order('waktu', ascending: false);
+
+      setState(() {
+        _notifs = (response as List).map((n) => NotifikasiModel(
+          id: n['id'],
+          judul: n['judul'],
+          pesan: n['pesan'],
+          tipe: n['tipe'],
+          waktu: DateTime.parse(n['waktu']),
+          sudahDibaca: n['sudah_dibaca'],
+        )).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _tandaiDibaca(NotifikasiModel n) async {
+    if (n.sudahDibaca) return;
+    setState(() => n.sudahDibaca = true);
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('notifikasi').update({'sudah_dibaca': true}).eq('id', n.id);
+    } catch (e) {
+      setState(() => n.sudahDibaca = false);
+    }
+  }
+
+  Future<void> _tandaiSemuaDibaca() async {
+    setState(() {
+      for (var n in _notifs) {
+        n.sudahDibaca = true;
+      }
+    });
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase
+          .from('notifikasi')
+          .update({'sudah_dibaca': true})
+          .eq('user_id', widget.user.id);
+    } catch (e) {
+      _loadNotifikasi();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF0F1117) : const Color(0xFFF5F7FA);
-    final notifs = DummyData.notifikasi;
-    final belumDibaca = notifs.where((n) => !n.sudahDibaca).length;
+    final belumDibaca = _notifs.where((n) => !n.sudahDibaca).length;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -44,13 +107,7 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
                   ),
                   if (belumDibaca > 0)
                     GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          for (var n in DummyData.notifikasi) {
-                            n.sudahDibaca = true;
-                          }
-                        });
-                      },
+                      onTap: _tandaiSemuaDibaca,
                       child: const Text('Tandai semua dibaca',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
                     ),
@@ -59,28 +116,31 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: notifs.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.notifications_off_outlined, size: 56,
-                              color: isDark ? Colors.white24 : Colors.grey[300]),
-                          const SizedBox(height: 12),
-                          Text('Tidak ada notifikasi',
-                              style: TextStyle(fontSize: 14, color: isDark ? Colors.white38 : Colors.grey[500])),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
-                      itemCount: notifs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final n = notifs[index];
-                        return _buildNotifCard(n, isDark);
-                      },
-                    ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+                  : _notifs.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.notifications_off_outlined, size: 56,
+                                  color: isDark ? Colors.white24 : Colors.grey[300]),
+                              const SizedBox(height: 12),
+                              Text('Tidak ada notifikasi',
+                                  style: TextStyle(fontSize: 14, color: isDark ? Colors.white38 : Colors.grey[500])),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadNotifikasi,
+                          color: AppTheme.primaryColor,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
+                            itemCount: _notifs.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            itemBuilder: (context, index) => _buildNotifCard(_notifs[index], isDark),
+                          ),
+                        ),
             ),
           ],
         ),
@@ -88,12 +148,12 @@ class _NotifikasiScreenState extends State<NotifikasiScreen> {
     );
   }
 
-  Widget _buildNotifCard(dynamic n, bool isDark) {
+  Widget _buildNotifCard(NotifikasiModel n, bool isDark) {
     final cardBg = isDark ? const Color(0xFF1C1F2E) : Colors.white;
     final tipeColor = _tipeColor(n.tipe);
 
     return GestureDetector(
-      onTap: () => setState(() => n.sudahDibaca = true),
+      onTap: () => _tandaiDibaca(n),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(14),

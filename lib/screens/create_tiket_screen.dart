@@ -1,7 +1,8 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
-import '../models/ticket_model.dart';
-import '../data/dummy_data.dart';
 import '../theme/app_theme.dart';
 
 class CreateTiketScreen extends StatefulWidget {
@@ -21,6 +22,9 @@ class _CreateTiketScreenState extends State<CreateTiketScreen> {
   String _prioritas = 'medium';
   bool _isLoading = false;
 
+  Uint8List? _gambarBytes;
+  String? _gambarExt;
+
   final List<String> _kategoris = [
     'Akses Sistem', 'Hardware', 'Software', 'Jaringan', 'Fasilitas', 'Lainnya'
   ];
@@ -32,36 +36,161 @@ class _CreateTiketScreenState extends State<CreateTiketScreen> {
     super.dispose();
   }
 
+  // FR-005 poin 2: upload laporan bisa dari file/galeri ATAU dari kamera.
+  Future<void> _pilihGambar() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined, color: AppTheme.primaryColor),
+              title: const Text('Ambil dari Kamera'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _ambilGambar(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined, color: AppTheme.primaryColor),
+              title: const Text('Pilih dari Galeri'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _ambilGambar(ImageSource.gallery);
+              },
+            ),
+            if (_gambarBytes != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Hapus Gambar', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _gambarBytes = null;
+                    _gambarExt = null;
+                  });
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _ambilGambar(ImageSource source) async {
+    try {
+      final picked = await ImagePicker().pickImage(source: source, imageQuality: 70);
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        setState(() {
+          _gambarBytes = bytes;
+          _gambarExt = picked.path.split('.').last;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(source == ImageSource.camera
+              ? 'Gagal mengakses kamera. Pastikan izin kamera sudah diaktifkan.'
+              : 'Gagal mengambil gambar dari galeri.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  Future<String?> _uploadGambar(String ticketId) async {
+    if (_gambarBytes == null) return null;
+    try {
+      final supabase = Supabase.instance.client;
+      final fileName = '$ticketId.${_gambarExt ?? 'jpg'}';
+
+      await supabase.storage.from('tiket-lampiran').uploadBinary(
+        fileName,
+        _gambarBytes!,
+        fileOptions: const FileOptions(upsert: true),
+      );
+
+      return supabase.storage.from('tiket-lampiran').getPublicUrl(fileName);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<String> _generateId() async {
+    final supabase = Supabase.instance.client;
+    final response = await supabase
+        .from('tickets')
+        .select('id')
+        .order('created_at', ascending: false)
+        .limit(1);
+
+    if ((response as List).isEmpty) return 'TKT-001';
+
+    final lastId = response[0]['id'] as String;
+    final lastNum = int.tryParse(lastId.split('-').last) ?? 0;
+    final newNum = (lastNum + 1).toString().padLeft(3, '0');
+    return 'TKT-$newNum';
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 800));
 
-    final newTiket = TicketModel(
-      id: 'TKT-00${DummyData.tikets.length + 1}',
-      judul: _judulCtrl.text.trim(),
-      deskripsi: _deskripsiCtrl.text.trim(),
-      status: 'open',
-      prioritas: _prioritas,
-      kategori: _kategori,
-      pembuatUsername: widget.user.username,
-      createdAt: DateTime.now(),
-    );
+    try {
+      final supabase = Supabase.instance.client;
+      final newId = await _generateId();
+      final lampiranUrl = await _uploadGambar(newId);
 
-    DummyData.tikets.insert(0, newTiket);
+      await supabase.from('tickets').insert({
+        'id': newId,
+        'judul': _judulCtrl.text.trim(),
+        'deskripsi': _deskripsiCtrl.text.trim(),
+        'status': 'open',
+        'prioritas': _prioritas,
+        'kategori': _kategori,
+        'pembuat_id': widget.user.id,
+        'assigned_to': null,
+        'created_at': DateTime.now().toIso8601String(),
+        'lampiran_url': lampiranUrl,
+      });
 
-    if (!mounted) return;
-    setState(() => _isLoading = false);
+      await supabase.from('riwayat_tiket').insert({
+        'ticket_id': newId,
+        'aksi': 'dibuat',
+        'keterangan': 'Tiket dibuat oleh ${widget.user.nama}',
+        'waktu': DateTime.now().toIso8601String(),
+      });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Tiket berhasil dibuat!'),
-        backgroundColor: AppTheme.successColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-    Navigator.pop(context);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Tiket berhasil dibuat!'),
+          backgroundColor: AppTheme.successColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Gagal membuat tiket, coba lagi.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   @override
@@ -130,31 +259,45 @@ class _CreateTiketScreenState extends State<CreateTiketScreen> {
                     _label('Lampiran (Opsional)', isDark),
                     const SizedBox(height: 8),
                     GestureDetector(
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Fitur upload akan tersedia setelah terhubung backend')),
-                      ),
-                      child: Container(
-                        width: double.infinity,
-                        height: 70,
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withOpacity(0.04) : const Color(0xFFF8F9FB),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark ? Colors.white12 : const Color(0xFFE0E0E0),
-                            style: BorderStyle.solid,
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.cloud_upload_outlined, size: 24,
-                                color: isDark ? Colors.white38 : Colors.grey[400]),
-                            const SizedBox(height: 4),
-                            Text('Klik untuk upload gambar / file',
-                                style: TextStyle(fontSize: 12, color: isDark ? Colors.white38 : Colors.grey[400])),
-                          ],
-                        ),
-                      ),
+                      onTap: _pilihGambar,
+                      child: _gambarBytes != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Stack(
+                                children: [
+                                  Image.memory(_gambarBytes!, width: double.infinity, height: 160, fit: BoxFit.cover),
+                                  Positioned(
+                                    top: 8, right: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                      child: const Icon(Icons.edit, color: Colors.white, size: 16),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Container(
+                              width: double.infinity,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withOpacity(0.04) : const Color(0xFFF8F9FB),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isDark ? Colors.white12 : const Color(0xFFE0E0E0),
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.cloud_upload_outlined, size: 24,
+                                      color: isDark ? Colors.white38 : Colors.grey[400]),
+                                  const SizedBox(height: 4),
+                                  Text('Klik untuk ambil foto / upload gambar',
+                                      style: TextStyle(fontSize: 12, color: isDark ? Colors.white38 : Colors.grey[400])),
+                                ],
+                              ),
+                            ),
                     ),
                   ],
                 ),

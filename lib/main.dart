@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
+
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.system);
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://icgwnuxbsxavtcrfwbxx.supabase.co',
+    anonKey: 'sb_publishable_BA1c8ybKYE92zy6EToDRgA_xVEl0bhH',
+  );
+
   runApp(const MyApp());
 }
 

@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi membutuhkan akses kamera untuk mengambil foto lampiran tiket</string>
 	<key>CFBundleDisplayName</key>
 	<string>Eticket Helpdesk</string>
 	<key>CFBundleExecutable</key>

@@ -1,15 +1,64 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
-import '../data/dummy_data.dart';
+import '../models/ticket_model.dart';
 import '../theme/app_theme.dart';
 import 'create_tiket_screen.dart';
+import 'kelola_pengguna_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final UserModel user;
   final Function(int) onNavigate;
 
   const DashboardScreen({super.key, required this.user, required this.onNavigate});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  List<TicketModel> _tikets = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTikets();
+  }
+
+  Future<void> _loadTikets() async {
+    setState(() => _isLoading = true);
+    try {
+      final supabase = Supabase.instance.client;
+      var query = supabase.from('tickets').select();
+
+      if (widget.user.role == 'Helpdesk') {
+        query = query.eq('assigned_to', widget.user.id);
+      } else if (widget.user.role == 'User') {
+        query = query.eq('pembuat_id', widget.user.id);
+      }
+
+      final response = await query.order('created_at', ascending: false);
+
+      setState(() {
+        _tikets = (response as List).map((t) => TicketModel(
+          id: t['id'],
+          judul: t['judul'],
+          deskripsi: t['deskripsi'],
+          status: t['status'],
+          prioritas: t['prioritas'],
+          kategori: t['kategori'],
+          pembuatId: t['pembuat_id'],
+          assignedTo: t['assigned_to'],
+          createdAt: DateTime.parse(t['created_at']),
+        )).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,16 +68,24 @@ class DashboardScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
-        child: user.role == 'Admin'
-            ? _buildAdminDashboard(context, isDark)
-            : user.role == 'Helpdesk'
-                ? _buildHelpdeskDashboard(context, isDark)
-                : _buildUserDashboard(context, isDark),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+            : RefreshIndicator(
+                onRefresh: _loadTikets,
+                color: AppTheme.primaryColor,
+                child: widget.user.role == 'Admin'
+                    ? _buildAdminDashboard(context, isDark)
+                    : widget.user.role == 'Helpdesk'
+                        ? _buildHelpdeskDashboard(context, isDark)
+                        : _buildUserDashboard(context, isDark),
+              ),
       ),
-      floatingActionButton: user.role == 'User'
+      // FR-005 & FR-006 poin 1: User maupun Helpdesk bisa membuat tiket.
+      floatingActionButton: (widget.user.role == 'User' || widget.user.role == 'Helpdesk')
           ? FloatingActionButton.extended(
               onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => CreateTiketScreen(user: user))),
+                  MaterialPageRoute(builder: (_) => CreateTiketScreen(user: widget.user)))
+                  .then((_) => _loadTikets()),
               backgroundColor: AppTheme.primaryColor,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add_rounded),
@@ -38,12 +95,16 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  // FR-009: Statistik Tiket -> Total, Open, Assign, In Progress, Closed.
+  // 'Closed' di dashboard menggabungkan status resolved & closed (selesai).
   Widget _buildAdminDashboard(BuildContext context, bool isDark) {
-    final tikets = DummyData.tikets;
+    final tikets = _tikets;
     final totalOpen = tikets.where((t) => t.status == 'open').length;
+    final totalAssigned = tikets.where((t) => t.status == 'assigned').length;
     final totalProgress = tikets.where((t) => t.status == 'on_progress').length;
     final totalResolved = tikets.where((t) => t.status == 'resolved').length;
     final totalClosed = tikets.where((t) => t.status == 'closed').length;
+    final totalSelesai = totalResolved + totalClosed;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -51,8 +112,33 @@ class DashboardScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(isDark, 'Admin', AppTheme.primaryColor),
-          const SizedBox(height: 20),
-          // 4 stat cards 2x2
+          const SizedBox(height: 16),
+          // FR-007 poin 7: Admin mengelola daftar pengguna.
+          GestureDetector(
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => KelolaPenggunaScreen(currentUser: widget.user))),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2), width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.manage_accounts_rounded, color: AppTheme.primaryColor, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Kelola Pengguna',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: AppTheme.primaryColor.withOpacity(0.6), size: 18),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Row(children: [
             Expanded(child: _statCard(isDark, 'Total', tikets.length, AppTheme.primaryColor, Icons.confirmation_number_rounded)),
             const SizedBox(width: 10),
@@ -60,31 +146,36 @@ class DashboardScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(child: _statCard(isDark, 'Progress', totalProgress, AppTheme.warningColor, Icons.autorenew_rounded)),
+            Expanded(child: _statCard(isDark, 'Assign', totalAssigned, AppTheme.assignedColor, Icons.support_agent_rounded)),
             const SizedBox(width: 10),
-            Expanded(child: _statCard(isDark, 'Resolved', totalResolved, AppTheme.successColor, Icons.check_circle_outline_rounded)),
+            Expanded(child: _statCard(isDark, 'Progress', totalProgress, AppTheme.warningColor, Icons.autorenew_rounded)),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _statCard(isDark, 'Closed', totalSelesai, AppTheme.successColor, Icons.check_circle_outline_rounded)),
           ]),
           const SizedBox(height: 20),
-          // Bar chart
           Text('Statistik Tiket', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
               color: isDark ? Colors.white : const Color(0xFF1A1A2E))),
           const SizedBox(height: 12),
-          _buildBarChart(isDark, totalOpen, totalProgress, totalResolved, totalClosed, tikets.length),
+          _buildBarChart(isDark, totalOpen, totalAssigned, totalProgress, totalSelesai, tikets.length),
           const SizedBox(height: 20),
-          // Tiket terbaru - semua tiket
           _buildRecentHeader(isDark, 'Semua Tiket Terbaru'),
           const SizedBox(height: 12),
-          ...tikets.take(4).map((t) => _tiketCard(isDark, t)),
+          if (tikets.isEmpty)
+            _emptyCard(isDark, 'Belum ada tiket')
+          else
+            ...tikets.take(4).map((t) => _tiketCard(isDark, t)),
         ],
       ),
     );
   }
 
   Widget _buildHelpdeskDashboard(BuildContext context, bool isDark) {
-    final tikets = DummyData.tikets.where((t) => t.assignedTo == user.username).toList();
-    final totalOpen = tikets.where((t) => t.status == 'open').length;
+    final tikets = _tikets;
+    final totalAssigned = tikets.where((t) => t.status == 'assigned').length;
     final totalProgress = tikets.where((t) => t.status == 'on_progress').length;
-    final totalResolved = tikets.where((t) => t.status == 'resolved').length;
+    final totalResolved = tikets.where((t) => t.status == 'resolved' || t.status == 'closed').length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -93,7 +184,6 @@ class DashboardScreen extends StatelessWidget {
         children: [
           _buildHeader(isDark, 'Helpdesk', AppTheme.warningColor),
           const SizedBox(height: 20),
-         
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -130,11 +220,11 @@ class DashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Row(children: [
-            Expanded(child: _statCard(isDark, 'Open', totalOpen, AppTheme.dangerColor, Icons.radio_button_unchecked_rounded)),
+            Expanded(child: _statCard(isDark, 'Assign', totalAssigned, AppTheme.assignedColor, Icons.support_agent_rounded)),
             const SizedBox(width: 10),
             Expanded(child: _statCard(isDark, 'Progress', totalProgress, AppTheme.warningColor, Icons.autorenew_rounded)),
             const SizedBox(width: 10),
-            Expanded(child: _statCard(isDark, 'Resolved', totalResolved, AppTheme.successColor, Icons.check_circle_outline_rounded)),
+            Expanded(child: _statCard(isDark, 'Closed', totalResolved, AppTheme.successColor, Icons.check_circle_outline_rounded)),
           ]),
           const SizedBox(height: 20),
           _buildRecentHeader(isDark, 'Tiket yang Diassign ke Saya'),
@@ -149,10 +239,11 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildUserDashboard(BuildContext context, bool isDark) {
-    final tikets = DummyData.tikets.where((t) => t.pembuatUsername == user.username).toList();
+    final tikets = _tikets;
     final totalOpen = tikets.where((t) => t.status == 'open').length;
+    final totalAssigned = tikets.where((t) => t.status == 'assigned').length;
     final totalProgress = tikets.where((t) => t.status == 'on_progress').length;
-    final totalResolved = tikets.where((t) => t.status == 'resolved').length;
+    final totalResolved = tikets.where((t) => t.status == 'resolved' || t.status == 'closed').length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -199,9 +290,13 @@ class DashboardScreen extends StatelessWidget {
           Row(children: [
             Expanded(child: _statCard(isDark, 'Open', totalOpen, AppTheme.dangerColor, Icons.radio_button_unchecked_rounded)),
             const SizedBox(width: 10),
+            Expanded(child: _statCard(isDark, 'Assign', totalAssigned, AppTheme.assignedColor, Icons.support_agent_rounded)),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
             Expanded(child: _statCard(isDark, 'Progress', totalProgress, AppTheme.warningColor, Icons.autorenew_rounded)),
             const SizedBox(width: 10),
-            Expanded(child: _statCard(isDark, 'Resolved', totalResolved, AppTheme.successColor, Icons.check_circle_outline_rounded)),
+            Expanded(child: _statCard(isDark, 'Closed', totalResolved, AppTheme.successColor, Icons.check_circle_outline_rounded)),
           ]),
           const SizedBox(height: 20),
           _buildRecentHeader(isDark, 'Tiket Terbaru'),
@@ -215,7 +310,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // ── SHARED WIDGETS ────────────────────────────────────────────
   Widget _buildHeader(bool isDark, String roleLabel, Color roleColor) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -225,7 +319,7 @@ class DashboardScreen extends StatelessWidget {
           children: [
             Text(_greeting(), style: TextStyle(fontSize: 13, color: isDark ? Colors.white54 : Colors.grey[600])),
             const SizedBox(height: 2),
-            Text(user.nama, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800,
+            Text(widget.user.nama, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800,
                 color: isDark ? Colors.white : const Color(0xFF1A1A2E))),
           ],
         ),
@@ -248,7 +342,7 @@ class DashboardScreen extends StatelessWidget {
         Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
             color: isDark ? Colors.white : const Color(0xFF1A1A2E))),
         GestureDetector(
-          onTap: () => onNavigate(1),
+          onTap: () => widget.onNavigate(1),
           child: const Text('Lihat Semua',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
         ),
@@ -278,7 +372,9 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBarChart(bool isDark, int open, int progress, int resolved, int closed, int total) {
+  // Bar chart 4 kategori: Open, Assign, Progress, Closed (sesuai FR-009, tanpa "Total"
+  // karena Total adalah keseluruhan, bukan kategori status tersendiri di chart).
+  Widget _buildBarChart(bool isDark, int open, int assigned, int progress, int closed, int total) {
     final cardBg = isDark ? const Color(0xFF1C1F2E) : Colors.white;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
@@ -298,7 +394,7 @@ class DashboardScreen extends StatelessWidget {
               touchTooltipData: BarTouchTooltipData(
                 getTooltipColor: (_) => isDark ? const Color(0xFF2A2D3E) : const Color(0xFFF5F7FA),
                 getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                  final labels = ['Open', 'Progress', 'Resolved', 'Closed'];
+                  final labels = ['Open', 'Assign', 'Progress', 'Closed'];
                   return BarTooltipItem('${labels[groupIndex]}\n${rod.toY.toInt()}',
                       TextStyle(color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                           fontSize: 12, fontWeight: FontWeight.w600));
@@ -311,7 +407,7 @@ class DashboardScreen extends StatelessWidget {
                 sideTitles: SideTitles(
                   showTitles: true,
                   getTitlesWidget: (value, meta) {
-                    final labels = ['Open', 'Progress', 'Resolved', 'Closed'];
+                    final labels = ['Open', 'Assign', 'Progress', 'Closed'];
                     return Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(labels[value.toInt()],
@@ -339,9 +435,9 @@ class DashboardScreen extends StatelessWidget {
             borderData: FlBorderData(show: false),
             barGroups: [
               _barGroup(0, open.toDouble(), AppTheme.dangerColor),
-              _barGroup(1, progress.toDouble(), AppTheme.warningColor),
-              _barGroup(2, resolved.toDouble(), AppTheme.successColor),
-              _barGroup(3, closed.toDouble(), Colors.grey),
+              _barGroup(1, assigned.toDouble(), AppTheme.assignedColor),
+              _barGroup(2, progress.toDouble(), AppTheme.warningColor),
+              _barGroup(3, closed.toDouble(), AppTheme.successColor),
             ],
           ),
         ),
@@ -358,7 +454,7 @@ class DashboardScreen extends StatelessWidget {
     ]);
   }
 
-  Widget _tiketCard(bool isDark, dynamic t) {
+  Widget _tiketCard(bool isDark, TicketModel t) {
     final cardBg = isDark ? const Color(0xFF1C1F2E) : Colors.white;
     final statusColor = AppTheme.statusColor(t.status);
     return Container(

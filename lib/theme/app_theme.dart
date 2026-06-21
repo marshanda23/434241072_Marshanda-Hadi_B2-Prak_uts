@@ -5,11 +5,14 @@ class AppTheme {
   static const successColor = Color(0xFF1D9E75);
   static const warningColor = Color(0xFFEF9F27);
   static const dangerColor = Color(0xFFE24B4A);
+  static const assignedColor = Color(0xFF8E5CD9);
 
   static Color statusColor(String status) {
     switch (status) {
       case 'open':
         return dangerColor;
+      case 'assigned':
+        return assignedColor;
       case 'on_progress':
         return warningColor;
       case 'resolved':
@@ -25,6 +28,8 @@ class AppTheme {
     switch (status) {
       case 'open':
         return 'Open';
+      case 'assigned':
+        return 'Assigned';
       case 'on_progress':
         return 'On Progress';
       case 'resolved':
