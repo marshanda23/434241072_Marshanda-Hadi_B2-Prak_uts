@@ -52,6 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           pembuatId: t['pembuat_id'],
           assignedTo: t['assigned_to'],
           createdAt: DateTime.parse(t['created_at']),
+          lampiranUrl: t['lampiran_url'], 
         )).toList();
         _isLoading = false;
       });
@@ -80,7 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         : _buildUserDashboard(context, isDark),
               ),
       ),
-      // FR-005 & FR-006 poin 1: User maupun Helpdesk bisa membuat tiket.
+      
       floatingActionButton: (widget.user.role == 'User' || widget.user.role == 'Helpdesk')
           ? FloatingActionButton.extended(
               onPressed: () => Navigator.push(context,
@@ -95,16 +96,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // FR-009: Statistik Tiket -> Total, Open, Assign, In Progress, Closed.
-  // 'Closed' di dashboard menggabungkan status resolved & closed (selesai).
+  
   Widget _buildAdminDashboard(BuildContext context, bool isDark) {
     final tikets = _tikets;
     final totalOpen = tikets.where((t) => t.status == 'open').length;
     final totalAssigned = tikets.where((t) => t.status == 'assigned').length;
     final totalProgress = tikets.where((t) => t.status == 'on_progress').length;
-    final totalResolved = tikets.where((t) => t.status == 'resolved').length;
     final totalClosed = tikets.where((t) => t.status == 'closed').length;
-    final totalSelesai = totalResolved + totalClosed;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -113,7 +111,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           _buildHeader(isDark, 'Admin', AppTheme.primaryColor),
           const SizedBox(height: 16),
-          // FR-007 poin 7: Admin mengelola daftar pengguna.
+          
           GestureDetector(
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => KelolaPenggunaScreen(currentUser: widget.user))),
@@ -139,26 +137,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 16),
+        
+          _totalCard(isDark, tikets.length, totalOpen),
+          const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: _statCard(isDark, 'Total', tikets.length, AppTheme.primaryColor, Icons.confirmation_number_rounded)),
-            const SizedBox(width: 10),
             Expanded(child: _statCard(isDark, 'Open', totalOpen, AppTheme.dangerColor, Icons.radio_button_unchecked_rounded)),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
+            const SizedBox(width: 8),
             Expanded(child: _statCard(isDark, 'Assign', totalAssigned, AppTheme.assignedColor, Icons.support_agent_rounded)),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(child: _statCard(isDark, 'Progress', totalProgress, AppTheme.warningColor, Icons.autorenew_rounded)),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _statCard(isDark, 'Closed', totalSelesai, AppTheme.successColor, Icons.check_circle_outline_rounded)),
+            const SizedBox(width: 8),
+            Expanded(child: _statCard(isDark, 'Closed', totalClosed, AppTheme.successColor, Icons.check_circle_outline_rounded)),
           ]),
           const SizedBox(height: 20),
           Text('Statistik Tiket', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
               color: isDark ? Colors.white : const Color(0xFF1A1A2E))),
           const SizedBox(height: 12),
-          _buildBarChart(isDark, totalOpen, totalAssigned, totalProgress, totalSelesai, tikets.length),
+          _buildBarChart(isDark, totalOpen, totalAssigned, totalProgress, totalClosed, tikets.length),
           const SizedBox(height: 20),
           _buildRecentHeader(isDark, 'Semua Tiket Terbaru'),
           const SizedBox(height: 12),
@@ -175,7 +170,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final tikets = _tikets;
     final totalAssigned = tikets.where((t) => t.status == 'assigned').length;
     final totalProgress = tikets.where((t) => t.status == 'on_progress').length;
-    final totalResolved = tikets.where((t) => t.status == 'resolved' || t.status == 'closed').length;
+    final totalClosed = tikets.where((t) => t.status == 'closed').length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -224,7 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 10),
             Expanded(child: _statCard(isDark, 'Progress', totalProgress, AppTheme.warningColor, Icons.autorenew_rounded)),
             const SizedBox(width: 10),
-            Expanded(child: _statCard(isDark, 'Closed', totalResolved, AppTheme.successColor, Icons.check_circle_outline_rounded)),
+            Expanded(child: _statCard(isDark, 'Closed', totalClosed, AppTheme.successColor, Icons.check_circle_outline_rounded)),
           ]),
           const SizedBox(height: 20),
           _buildRecentHeader(isDark, 'Tiket yang Diassign ke Saya'),
@@ -243,7 +238,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final totalOpen = tikets.where((t) => t.status == 'open').length;
     final totalAssigned = tikets.where((t) => t.status == 'assigned').length;
     final totalProgress = tikets.where((t) => t.status == 'on_progress').length;
-    final totalResolved = tikets.where((t) => t.status == 'resolved' || t.status == 'closed').length;
+    final totalClosed = tikets.where((t) => t.status == 'closed').length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
@@ -296,7 +291,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(children: [
             Expanded(child: _statCard(isDark, 'Progress', totalProgress, AppTheme.warningColor, Icons.autorenew_rounded)),
             const SizedBox(width: 10),
-            Expanded(child: _statCard(isDark, 'Closed', totalResolved, AppTheme.successColor, Icons.check_circle_outline_rounded)),
+            Expanded(child: _statCard(isDark, 'Closed', totalClosed, AppTheme.successColor, Icons.check_circle_outline_rounded)),
           ]),
           const SizedBox(height: 20),
           _buildRecentHeader(isDark, 'Tiket Terbaru'),
@@ -350,10 +345,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  
+  Widget _totalCard(bool isDark, int total, int totalOpen) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.primaryColor, Color(0xFF0D3B8C)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Total Tiket Sistem', style: TextStyle(fontSize: 13, color: Colors.white70)),
+                const SizedBox(height: 4),
+                Text('$total Tiket',
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
+                const SizedBox(height: 4),
+                Text('$totalOpen tiket baru menunggu diterima',
+                    style: const TextStyle(fontSize: 12, color: Colors.white70)),
+              ],
+            ),
+          ),
+          Container(
+            width: 56, height: 56,
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(14)),
+            child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 28),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _statCard(bool isDark, String label, int count, Color color, IconData icon) {
     final cardBg = isDark ? const Color(0xFF1C1F2E) : Colors.white;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
@@ -362,18 +395,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 8),
-          Text('$count', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 6),
+          Text('$count', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
               color: isDark ? Colors.white : const Color(0xFF1A1A2E))),
-          Text(label, style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey[600])),
+          Text(label, style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.grey[600]),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
   }
 
-  // Bar chart 4 kategori: Open, Assign, Progress, Closed (sesuai FR-009, tanpa "Total"
-  // karena Total adalah keseluruhan, bukan kategori status tersendiri di chart).
+  
   Widget _buildBarChart(bool isDark, int open, int assigned, int progress, int closed, int total) {
     final cardBg = isDark ? const Color(0xFF1C1F2E) : Colors.white;
     return Container(

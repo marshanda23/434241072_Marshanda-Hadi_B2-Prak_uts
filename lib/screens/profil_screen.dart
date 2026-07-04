@@ -30,7 +30,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
     _user = widget.user;
   }
 
-  // Ganti nama pengguna lewat dialog input sederhana, lalu update ke Supabase.
+  
   Future<void> _gantiNama() async {
     final ctrl = TextEditingController(text: _user.nama);
     final namaBaru = await showDialog<String>(
@@ -87,8 +87,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
     }
   }
 
-  // Ganti foto profil: pilih dari kamera/galeri, upload ke bucket 'avatars',
-  // lalu simpan URL publiknya ke kolom avatar_url di tabel profiles.
+  
   Future<void> _gantiFoto() async {
     showModalBottomSheet(
       context: context,
@@ -137,9 +136,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
 
       setState(() => _isUploadingFoto = true);
       final bytes = await picked.readAsBytes();
-      // Di platform web, picked.path adalah blob URL (mis. "blob:http://localhost/uuid"),
-      // bukan path file biasa — jadi ekstensi tidak bisa diambil dari path.
-      // Pakai MIME type dari XFile (atau fallback ke jpg) supaya aman di web & mobile.
+
       final ext = _extensiFromMime(picked.mimeType) ?? _extensiFromNama(picked.name) ?? 'jpg';
       final fileName = '${_user.id}.$ext';
 
@@ -150,8 +147,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
         fileOptions: FileOptions(upsert: true, contentType: picked.mimeType ?? 'image/jpeg'),
       );
 
-      // Tambahkan query param waktu agar Image.network tidak menampilkan cache lama
-      // saat URL-nya persis sama dengan sebelumnya (nama file = user id, statis).
       final rawUrl = supabase.storage.from('avatars').getPublicUrl(fileName);
       final urlBaru = '$rawUrl?t=${DateTime.now().millisecondsSinceEpoch}';
 
@@ -187,8 +182,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
     }
   }
 
-  // Helper: ambil ekstensi file dari MIME type, contoh "image/jpeg" -> "jpg".
-  // Lebih reliable daripada parsing path, karena path di web berupa blob URL.
   String? _extensiFromMime(String? mimeType) {
     if (mimeType == null) return null;
     switch (mimeType) {
@@ -205,12 +198,11 @@ class _ProfilScreenState extends State<ProfilScreen> {
     }
   }
 
-  // Fallback: ambil ekstensi dari nama file asli (XFile.name), kalau MIME
-  // type tidak tersedia. Aman dipakai karena XFile.name bukan path/URL.
+  
   String? _extensiFromNama(String nama) {
     if (!nama.contains('.')) return null;
     final ext = nama.split('.').last.toLowerCase();
-    if (ext.length > 5 || ext.isEmpty) return null; // guard terhadap nama aneh
+    if (ext.length > 5 || ext.isEmpty) return null; 
     return ext;
   }
 

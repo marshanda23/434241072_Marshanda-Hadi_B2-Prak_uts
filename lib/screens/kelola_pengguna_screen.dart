@@ -3,12 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
 
-// FR-007 poin 7: Admin mengelola daftar pengguna.
-// Catatan desain: "hapus" diimplementasikan sebagai nonaktifkan (soft-delete),
-// bukan hapus permanen dari auth.users. Ini supaya data tiket/riwayat/komentar
-// milik user tersebut tetap konsisten (tidak ada data yatim), dan aksi admin
-// tetap bisa dibatalkan. Hapus permanen butuh Service Role Key / Edge Function
-// yang tidak aman ditaruh di sisi Flutter.
 class KelolaPenggunaScreen extends StatefulWidget {
   final UserModel currentUser;
 

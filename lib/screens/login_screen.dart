@@ -65,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         return;
       }
 
-      // Ambil data tambahan (nama, role) dari tabel profiles
+
       final profile = await supabase
           .from('profiles')
           .select()

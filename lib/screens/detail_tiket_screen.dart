@@ -34,9 +34,6 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
     _loadNamaPembuatDanAssignee();
   }
 
-  // pembuatId & assignedTo di TicketModel menyimpan UUID, bukan nama —
-  // perlu di-resolve dulu lewat tabel profiles supaya tidak menampilkan
-  // UUID mentah ke user.
   Future<void> _loadNamaPembuatDanAssignee() async {
     try {
       final supabase = Supabase.instance.client;
@@ -102,8 +99,6 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
     }
   }
 
-  // Mengambil komentar dari database, sekaligus join nama dari tabel profiles
-  // supaya tidak perlu menampilkan uuid mentah ke user.
   Future<void> _loadKomentar() async {
     setState(() => _isLoadingKomentar = true);
     try {
@@ -147,9 +142,6 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
     }
   }
 
-  // FR-005 poin 6: User mendapatkan notifikasi perubahan tiket.
-  // Insert ke tabel notifikasi untuk userId tertentu. Dipanggil setiap kali
-  // ada perubahan signifikan pada tiket (assign / update status).
   Future<void> _kirimNotifikasi({
     required String userId,
     required String judul,
@@ -167,7 +159,7 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
         'sudah_dibaca': false,
       });
     } catch (e) {
-      // silent fail — notifikasi gagal terkirim tidak boleh mengganggu aksi utama
+      // silent fail — notifikasi gagal t
     }
   }
 
@@ -198,7 +190,7 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
 
       await _catatRiwayat('komentar', '${widget.user.nama} menambahkan komentar');
 
-      // Notifikasi ke pembuat tiket & helpdesk yang ditugaskan (selain pengirim sendiri).
+      
       final penerima = <String>{_tiket.pembuatId, if (_tiket.assignedTo != null) _tiket.assignedTo!}
           .where((id) => id != widget.user.id);
       for (final id in penerima) {
@@ -230,13 +222,13 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
       final labelStatus = AppTheme.statusLabel(status);
       await _catatRiwayat('status', 'Status diubah menjadi $labelStatus oleh ${widget.user.nama}');
 
-      // Notifikasi ke pembuat tiket bahwa statusnya berubah.
+    
       if (_tiket.pembuatId != widget.user.id) {
         await _kirimNotifikasi(
           userId: _tiket.pembuatId,
           judul: 'Status tiket ${_tiket.id} berubah',
           pesan: 'Tiket "${_tiket.judul}" sekarang berstatus $labelStatus',
-          tipe: status == 'resolved' || status == 'closed' ? 'success' : 'info',
+          tipe: status == 'closed' ? 'success' : 'info',
         );
       }
 
@@ -261,21 +253,57 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
     }
   }
 
-  // Assign tiket ke helpdesk. Begitu admin assign, status tiket otomatis
-  // ikut berubah jadi 'assigned' supaya tercermin di dashboard statistik
-  // (FR-009: Total / Open / Assign / In Progress / Closed).
+  Future<void> _terimaTiket() async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('tickets').update({'status': 'assigned'}).eq('id', _tiket.id);
+      setState(() => _tiket = _tiket.copyWith(status: 'assigned'));
+
+      await _catatRiwayat('diterima', 'Tiket diterima oleh ${widget.user.nama}, menunggu dipilihkan helpdesk');
+
+      if (_tiket.pembuatId != widget.user.id) {
+        await _kirimNotifikasi(
+          userId: _tiket.pembuatId,
+          judul: 'Tiket ${_tiket.id} diterima',
+          pesan: 'Tiket "${_tiket.judul}" sudah diterima admin dan akan segera ditugaskan ke helpdesk',
+          tipe: 'info',
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Tiket diterima — silakan pilih helpdesk'),
+          backgroundColor: AppTheme.assignedColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Gagal menerima tiket'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
   Future<void> _assignTiket(String helpdeskId) async {
     try {
       final supabase = Supabase.instance.client;
       await supabase
           .from('tickets')
-          .update({'assigned_to': helpdeskId, 'status': 'assigned'}).eq('id', _tiket.id);
-      setState(() => _tiket = _tiket.copyWith(assignedTo: helpdeskId, status: 'assigned'));
+          .update({'assigned_to': helpdeskId, 'status': 'on_progress'}).eq('id', _tiket.id);
+      setState(() => _tiket = _tiket.copyWith(assignedTo: helpdeskId, status: 'on_progress'));
 
       final nama = _daftarHelpdesk.firstWhere((h) => h.id == helpdeskId).nama;
       await _catatRiwayat('assign', 'Tiket diassign ke $nama oleh ${widget.user.nama}');
+      await _catatRiwayat('status', 'Status diubah menjadi On Progress — $nama sedang menangani tiket ini');
 
-      // Notifikasi ke helpdesk yang baru ditugaskan, dan ke pembuat tiket.
       await _kirimNotifikasi(
         userId: helpdeskId,
         judul: 'Tiket baru ditugaskan: ${_tiket.id}',
@@ -285,8 +313,8 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
       if (_tiket.pembuatId != widget.user.id) {
         await _kirimNotifikasi(
           userId: _tiket.pembuatId,
-          judul: 'Tiket ${_tiket.id} diassign',
-          pesan: 'Tiket "${_tiket.judul}" sedang ditangani oleh $nama',
+          judul: 'Tiket ${_tiket.id} sedang ditangani',
+          pesan: 'Tiket "${_tiket.judul}" sedang dikerjakan oleh $nama',
           tipe: 'info',
         );
       }
@@ -294,8 +322,8 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Tiket diassign ke $nama'),
-          backgroundColor: AppTheme.primaryColor,
+          content: Text('Tiket diassign ke $nama — status On Progress'),
+          backgroundColor: AppTheme.warningColor,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
@@ -312,11 +340,61 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
     }
   }
 
-  // BR-002 poin 8: Delete tiket (khusus Admin).
-  // Menghapus data terkait dulu (riwayat_tiket, komentar, notifikasi yang
-  // mereferensikan tiket ini) sebelum menghapus row tickets-nya sendiri.
-  // Pendekatan manual ini dipakai karena status ON CASCADE DELETE di Supabase
-  // belum dipastikan terpasang, jadi aman dipanggil terlepas dari konfigurasi DB.
+  Future<void> _selesaikanTiket() async {
+    final konfirmasi = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Selesaikan Tiket', style: TextStyle(fontWeight: FontWeight.w700)),
+        content: Text('Tandai tiket ${_tiket.id} "${_tiket.judul}" sebagai selesai? Status akan berubah menjadi Closed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successColor, foregroundColor: Colors.white),
+            child: const Text('Selesai'),
+          ),
+        ],
+      ),
+    );
+    if (konfirmasi != true) return;
+
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('tickets').update({'status': 'closed'}).eq('id', _tiket.id);
+      setState(() => _tiket = _tiket.copyWith(status: 'closed'));
+
+      await _catatRiwayat('status', 'Tiket diselesaikan oleh ${widget.user.nama} — status Closed');
+
+      if (_tiket.pembuatId != widget.user.id) {
+        await _kirimNotifikasi(
+          userId: _tiket.pembuatId,
+          judul: 'Tiket ${_tiket.id} selesai',
+          pesan: 'Tiket "${_tiket.judul}" telah selesai dikerjakan oleh ${widget.user.nama}',
+          tipe: 'success',
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Tiket berhasil diselesaikan'),
+          backgroundColor: AppTheme.successColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: const Text('Gagal menyelesaikan tiket'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+      );
+    }
+  }
+
   Future<void> _hapusTiket() async {
     final konfirmasi = await showDialog<bool>(
       context: context,
@@ -351,7 +429,7 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
-      Navigator.pop(context, true); // kembali ke list, beri sinyal refresh
+      Navigator.pop(context, true); 
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -390,26 +468,33 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
               onSelected: (value) {
                 if (value == 'hapus') {
                   _hapusTiket();
+                } else if (value == 'terima') {
+                  _terimaTiket();
                 } else if (value.startsWith('assign_')) {
                   _assignTiket(value.replaceFirst('assign_', ''));
-                } else {
-                  _updateStatus(value);
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'open', child: Text('Set Open')),
-                const PopupMenuItem(value: 'on_progress', child: Text('Set On Progress')),
-                const PopupMenuItem(value: 'resolved', child: Text('Set Resolved')),
-                const PopupMenuItem(value: 'closed', child: Text('Set Closed')),
-                const PopupMenuDivider(),
-                ..._daftarHelpdesk
-                    .map((h) => PopupMenuItem(value: 'assign_${h.id}', child: Text('Assign ke ${h.nama}'))),
-                const PopupMenuDivider(),
+                if (_tiket.status == 'open')
+                  const PopupMenuItem(value: 'terima', child: Text('Terima Tiket')),
+                if (_tiket.status == 'assigned' && _daftarHelpdesk.isNotEmpty) ...[
+                  const PopupMenuItem(enabled: false,
+                    child: Text('Pilih Helpdesk', style: TextStyle(fontSize: 11, color: Colors.grey))),
+                  ..._daftarHelpdesk
+                      .map((h) => PopupMenuItem(value: 'assign_${h.id}', child: Text(h.nama))),
+                  const PopupMenuDivider(),
+                ],
                 const PopupMenuItem(
                   value: 'hapus',
                   child: Text('Hapus Tiket', style: TextStyle(color: AppTheme.dangerColor)),
                 ),
               ],
+            ),
+          if (widget.user.role == 'Helpdesk' && _tiket.status == 'on_progress')
+            TextButton.icon(
+              onPressed: _selesaikanTiket,
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppTheme.successColor),
+              label: const Text('Selesai', style: TextStyle(color: AppTheme.successColor, fontWeight: FontWeight.w600)),
             ),
           if (widget.user.role == 'Helpdesk')
             PopupMenuButton<String>(
@@ -417,7 +502,6 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
               onSelected: _updateStatus,
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'on_progress', child: Text('Set On Progress')),
-                const PopupMenuItem(value: 'resolved', child: Text('Set Resolved')),
                 const PopupMenuItem(value: 'closed', child: Text('Set Closed')),
               ],
             ),
@@ -578,7 +662,6 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
               const SizedBox(height: 16),
             ],
 
-            // ── RIWAYAT TIKET (tracking ala Shopee, vertikal) ──────
             Text('Riwayat Tiket',
                 style: TextStyle(
                     fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.white : const Color(0xFF1A1A2E))),
@@ -647,8 +730,6 @@ class _DetailTiketScreenState extends State<DetailTiketScreen> {
   Widget _timelineItem(RiwayatTiketModel r, bool isDark, {required bool isLast}) {
     final color = _aksiColor(r.aksi);
     final icon = _aksiIcon(r.aksi);
-    // Item terakhir = status terkini tiket, ditonjolkan seperti tracking Shopee:
-    // titik lebih besar dengan ring/glow, judul lebih tebal.
     final dotSize = isLast ? 40.0 : 32.0;
     final iconSize = isLast ? 20.0 : 16.0;
 

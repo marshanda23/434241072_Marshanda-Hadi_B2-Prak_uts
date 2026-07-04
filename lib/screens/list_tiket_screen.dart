@@ -18,12 +18,12 @@ class ListTiketScreen extends StatefulWidget {
 
 class _ListTiketScreenState extends State<ListTiketScreen> {
   String _filterStatus = 'semua';
-  String? _filterHelpdesk; // null = semua helpdesk (khusus Admin, FR-007 poin 3)
+  String? _filterHelpdesk; 
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
   List<TicketModel> _tikets = [];
   List<UserModel> _daftarHelpdesk = [];
-  Map<String, String> _namaMap = {}; // id user -> nama, untuk resolve pembuatId/assignedTo
+  Map<String, String> _namaMap = {}; 
   bool _isLoading = true;
 
   bool get isAdmin => widget.user.role == 'Admin';
@@ -51,7 +51,7 @@ class _ListTiketScreenState extends State<ListTiketScreen> {
         _daftarHelpdesk = (response as List).map((u) => UserModel.fromMap(u)).toList();
       });
     } catch (e) {
-      // silent fail, filter helpdesk tetap bisa diabaikan
+      
     }
   }
 
@@ -98,9 +98,7 @@ class _ListTiketScreenState extends State<ListTiketScreen> {
     }
   }
 
-  // pembuatId & assignedTo di TicketModel menyimpan UUID, bukan nama —
-  // resolve sekali jalan lewat tabel profiles supaya card tiket tidak
-  // menampilkan UUID mentah ke user.
+  
   Future<void> _loadNamaUser() async {
     final ids = <String>{
       for (final t in _tikets) t.pembuatId,
@@ -116,7 +114,7 @@ class _ListTiketScreenState extends State<ListTiketScreen> {
         };
       });
     } catch (e) {
-      // silent fail — card akan fallback ke UUID jika nama tidak berhasil di-resolve
+      
     }
   }
 
@@ -187,18 +185,17 @@ class _ListTiketScreenState extends State<ListTiketScreen> {
                 ),
               ),
             ),
-            // FR-009 / status sesuai dashboard: Semua, Open, Assigned, On Progress, Resolved, Closed.
+      
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Row(
-                children: ['semua', 'open', 'assigned', 'on_progress', 'resolved', 'closed'].map((s) {
+                children: ['semua', 'open', 'assigned', 'on_progress', 'closed'].map((s) {
                   final labels = {
                     'semua': 'Semua',
                     'open': 'Open',
                     'assigned': 'Assigned',
                     'on_progress': 'On Progress',
-                    'resolved': 'Resolved',
                     'closed': 'Closed',
                   };
                   final isActive = _filterStatus == s;
@@ -222,7 +219,7 @@ class _ListTiketScreenState extends State<ListTiketScreen> {
                 }).toList(),
               ),
             ),
-            // FR-007 poin 3: Admin melihat tiket berdasarkan helpdesk yang ditugaskan.
+      
             if (isAdmin && _daftarHelpdesk.isNotEmpty) ...[
               const SizedBox(height: 10),
               Padding(
@@ -286,7 +283,7 @@ class _ListTiketScreenState extends State<ListTiketScreen> {
           ],
         ),
       ),
-      // FR-005 & FR-006 poin 1: User maupun Helpdesk bisa membuat tiket.
+      
       floatingActionButton: (isUser || isHelpdesk)
           ? FloatingActionButton(
               onPressed: () => Navigator.push(context,
@@ -330,22 +327,28 @@ class _ListTiketScreenState extends State<ListTiketScreen> {
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: prioritasColor)),
                 ),
                 const Spacer(),
-                if (isAdmin && t.assignedTo == null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                    child: const Text('Belum diassign', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.orange)),
-                  ),
-                if (t.assignedTo != null || !isAdmin) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
-                    child: Text(AppTheme.statusLabel(t.status),
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: statusColor)),
-                  ),
-                ],
+
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
+                  child: Text(AppTheme.statusLabel(t.status),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: statusColor)),
+                ),
               ],
             ),
+  
+            if (isAdmin && t.status == 'assigned' && t.assignedTo == null) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                  child: const Text('Belum dipilihkan helpdesk',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.orange)),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(t.judul, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
                 color: isDark ? Colors.white : const Color(0xFF1A1A2E)),

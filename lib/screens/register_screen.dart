@@ -52,9 +52,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     try {
       final supabase = Supabase.instance.client;
 
-      // Daftar menggunakan Supabase Auth.
-      // Trigger di database (handle_new_user) otomatis membuat row
-      // di tabel profiles menggunakan data ini.
       await supabase.auth.signUp(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text.trim(),

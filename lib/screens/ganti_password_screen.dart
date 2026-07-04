@@ -49,7 +49,6 @@ class _GantiPasswordScreenState extends State<GantiPasswordScreen> {
         return;
       }
 
-      // Verifikasi password lama dengan re-sign-in
       try {
         await supabase.auth.signInWithPassword(
           email: email,
@@ -69,7 +68,6 @@ class _GantiPasswordScreenState extends State<GantiPasswordScreen> {
         return;
       }
 
-      // Password lama benar, update ke password baru
       await supabase.auth.updateUser(
         UserAttributes(password: _baruCtr.text.trim()),
       );

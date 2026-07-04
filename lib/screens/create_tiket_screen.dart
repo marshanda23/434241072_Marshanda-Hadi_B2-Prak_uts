@@ -36,7 +36,6 @@ class _CreateTiketScreenState extends State<CreateTiketScreen> {
     super.dispose();
   }
 
-  // FR-005 poin 2: upload laporan bisa dari file/galeri ATAU dari kamera.
   Future<void> _pilihGambar() async {
     showModalBottomSheet(
       context: context,
@@ -120,6 +119,17 @@ class _CreateTiketScreenState extends State<CreateTiketScreen> {
 
       return supabase.storage.from('tiket-lampiran').getPublicUrl(fileName);
     } catch (e) {
+      debugPrint('Upload lampiran gagal: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Gagal upload lampiran: tiket tetap dibuat tanpa gambar.'),
+            backgroundColor: AppTheme.warningColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
       return null;
     }
   }
@@ -233,7 +243,7 @@ class _CreateTiketScreenState extends State<CreateTiketScreen> {
                     const SizedBox(height: 8),
                     _buildTextField(
                       controller: _judulCtrl,
-                      hint: 'Contoh: Tidak bisa login ke SIAKAD',
+                      hint:'',
                       isDark: isDark,
                       validator: (v) => v!.trim().isEmpty ? 'Judul tidak boleh kosong' : null,
                     ),
